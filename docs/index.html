@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gasless AI decision logger</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.0/dist/ethers.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #e0e0e0;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container { max-width: 780px; margin: 0 auto; }
+
+    header { margin-bottom: 48px; }
+
+    header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      color: #666;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    header p a { color: #555; text-decoration: none; }
+    header p a:hover { color: #999; }
+
+    .meta {
+      display: flex;
+      gap: 24px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+
+    .meta-item { color: #444; font-size: 11px; }
+    .meta-item span { color: #888; }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      color: #555;
+      font-size: 11px;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #333;
+      flex-shrink: 0;
+    }
+
+    .dot.green { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+    .dot.loading { background: #f59e0b; animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .entries { display: flex; flex-direction: column; gap: 16px; }
+
+    .entry {
+      border: 1px solid #1a1a1a;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .entry-header {
+      background: #111;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .entry-index { color: #fff; font-weight: 600; font-size: 12px; }
+    .entry-time { color: #444; font-size: 11px; }
+
+    .entry-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+    .field { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
+    .field-label { color: #444; font-size: 11px; }
+    .field-value { color: #888; font-size: 11px; word-break: break-all; }
+    .field-value.prompt { color: #bbb; }
+
+    .hash-value {
+      color: #4ade80;
+      font-size: 11px;
+      word-break: break-all;
+    }
+
+    .agent-value { color: #818cf8; font-size: 11px; }
+
+    .badge {
+      display: inline-block;
+      background: #0a1a0a;
+      border: 1px solid #1a3a1a;
+      color: #4ade80;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: #333;
+    }
+
+    .error {
+      background: #1a0a0a;
+      border: 1px solid #2a1010;
+      border-radius: 8px;
+      padding: 16px;
+      color: #f87171;
+      font-size: 12px;
+    }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid #1a1a1a;
+      color: #333;
+      font-size: 11px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    footer a { color: #444; text-decoration: none; }
+    footer a:hover { color: #888; }
+
+    button {
+      background: #111;
+      border: 1px solid #222;
+      color: #666;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    button:hover { border-color: #444; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>gasless AI decision logger</h1>
+      <p>
+        every AI decision hashed and logged onchain — permanently, for free. &nbsp;·&nbsp;
+        <a href="https://github.com/eipieq/status-network" target="_blank">github</a>
+      </p>
+      <div class="meta">
+        <div class="meta-item">contract <span>0xF1DD974...2Fc1e</span></div>
+        <div class="meta-item">network <span>Status Network Sepolia</span></div>
+        <div class="meta-item">chain ID <span>1660990954</span></div>
+        <div class="meta-item">gas price <span>0</span></div>
+        <div class="meta-item">total logs <span id="total-count">—</span></div>
+      </div>
+    </header>
+
+    <div class="status-bar">
+      <div class="dot loading" id="dot"></div>
+      <span id="status-text">connecting to Status Network...</span>
+      <button onclick="load()" style="margin-left: auto">refresh</button>
+    </div>
+
+    <div id="output"></div>
+
+    <footer>
+      <span>deployed on Status Network Sepolia · gasPrice: 0</span>
+      <span>
+        <a href="https://github.com/eipieq/status-network" target="_blank">source</a>
+        &nbsp;·&nbsp;
+        <a href="https://public.sepolia.rpc.status.network" target="_blank">rpc</a>
+      </span>
+    </footer>
+  </div>
+
+  <script>
+    const RPC = "https://public.sepolia.rpc.status.network";
+    const ADDRESS = "0xF1DD974deD8ECF432AF9A0abb10584dE92d2Fc1e";
+    const ABI = [
+      "function getLogs() external view returns (tuple(bytes32 outputHash, string prompt, address agent, uint256 timestamp)[])"
+    ];
+
+    function short(h) { return h.slice(0, 10) + "..." + h.slice(-8); }
+
+    function setStatus(text, state) {
+      document.getElementById("status-text").textContent = text;
+      document.getElementById("dot").className = "dot " + (state || "");
+    }
+
+    async function load() {
+      setStatus("connecting to Status Network...", "loading");
+      document.getElementById("output").innerHTML = "";
+
+      try {
+        const provider = new ethers.JsonRpcProvider(RPC);
+        const contract = new ethers.Contract(ADDRESS, ABI, provider);
+        const raw = await contract.getLogs();
+
+        setStatus(`${raw.length} decisions logged onchain`, "green");
+        document.getElementById("total-count").textContent = raw.length;
+
+        if (raw.length === 0) {
+          document.getElementById("output").innerHTML = `<div class="empty">no decisions logged yet</div>`;
+          return;
+        }
+
+        const html = [...raw].reverse().map((entry, i) => {
+          const index = raw.length - i;
+          const time = new Date(Number(entry.timestamp) * 1000).toLocaleString();
+          const isPoA = entry.prompt.startsWith("proof-of-agent:");
+          const promptDisplay = isPoA
+            ? entry.prompt.replace("proof-of-agent:", "step: ")
+            : entry.prompt;
+
+          return `
+            <div class="entry">
+              <div class="entry-header">
+                <span class="entry-index">log #${index} <span class="badge">✓ gasless</span></span>
+                <span class="entry-time">${time}</span>
+              </div>
+              <div class="entry-body">
+                <div class="field">
+                  <span class="field-label">prompt</span>
+                  <span class="field-value prompt">${promptDisplay.length > 120 ? promptDisplay.slice(0, 120) + '...' : promptDisplay}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">output hash</span>
+                  <span class="hash-value">${entry.outputHash}</span>
+                </div>
+                <div class="field">
+                  <span class="field-label">agent</span>
+                  <span class="agent-value">${entry.agent}</span>
+                </div>
+              </div>
+            </div>`;
+        }).join("");
+
+        document.getElementById("output").innerHTML = `<div class="entries">${html}</div>`;
+
+      } catch (e) {
+        setStatus("connection failed", "");
+        document.getElementById("output").innerHTML = `<div class="error">error: ${e.message}</div>`;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
